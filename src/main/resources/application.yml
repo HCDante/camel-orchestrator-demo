@@ -1,0 +1,17 @@
+server:
+  port: 8080
+
+camel:
+  springboot:
+    name: orchestrator-demo
+
+# Simulación de endpoints Kafka y MongoDB (no son obligatorios aún)
+spring:
+  data:
+    mongodb:
+      uri: mongodb://localhost:27017/so
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*"

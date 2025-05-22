@@ -8,6 +8,8 @@ import org.apache.camel.model.rest.RestBindingMode;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import java.util.Collections;
+
 @Component
 public class TransactionRoute extends RouteBuilder {
 
@@ -28,7 +30,7 @@ public class TransactionRoute extends RouteBuilder {
                 .component("servlet")
                 .contextPath("/api")
                         .bindingMode(RestBindingMode.json)
-                                .dataFormatProperty("prettyPrint", "true");
+                                .dataFormatProperty("prettyPrint", "false");
         rest("/test")
                 .get("/a")
                 .type(TransactionRequest.class)
@@ -69,7 +71,8 @@ public class TransactionRoute extends RouteBuilder {
                 TransactionRequest req = exchange.getIn().getBody(TransactionRequest.class);
                 eventPublisher.publish(req); // Simulado, imprime en logs
             })
-            .setBody(simple("{\"status\":\"OK\"}"))
-            .setHeader(Exchange.HTTP_RESPONSE_CODE, constant(200));
+                .setBody(constant(Collections.singletonMap("status", "OK")))
+                .setHeader(Exchange.CONTENT_TYPE, constant("application/json"))
+                .setHeader(Exchange.HTTP_RESPONSE_CODE, constant(200));
     }
 }

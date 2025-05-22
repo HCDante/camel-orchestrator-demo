@@ -4,6 +4,9 @@ server:
 camel:
   springboot:
     name: orchestrator-demo
+  servlet:
+    mapping:
+      context-path: "/api/*"
 
 # Simulación de endpoints Kafka y MongoDB (no son obligatorios aún)
 spring:

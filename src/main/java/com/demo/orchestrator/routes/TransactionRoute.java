@@ -4,6 +4,7 @@ import com.demo.orchestrator.model.TransactionRequest;
 import com.demo.orchestrator.service.EventPublisher;
 import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.Exchange;
+import org.apache.camel.model.rest.RestBindingMode;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -23,10 +24,23 @@ public class TransactionRoute extends RouteBuilder {
             .setHeader(Exchange.HTTP_RESPONSE_CODE, constant(500))
             .setBody().simple("{\"error\":\"${exception.message}\"}");
 
-        rest("/api/transactions")
+        restConfiguration()
+                .component("servlet")
+                .contextPath("/api")
+                        .bindingMode(RestBindingMode.json)
+                                .dataFormatProperty("prettyPrint", "true");
+        rest("/test")
+                .get("/a")
+                .type(TransactionRequest.class)
+                .to("direct:a");
+
+        rest("/transactions")
             .post()
             .type(TransactionRequest.class)
             .to("direct:process-transaction");
+
+        from("direct:a")
+                .setBody(constant("hola"));
 
         from("direct:process-transaction")
             .routeId("transactionRoute")

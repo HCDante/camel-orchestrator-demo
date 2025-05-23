@@ -2,8 +2,11 @@ package com.demo.orchestrator.routes;
 
 import com.demo.orchestrator.model.TransactionRequest;
 import com.demo.orchestrator.service.EventPublisher;
+import org.apache.camel.LoggingLevel;
+import org.apache.camel.ValidationException;
 import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.Exchange;
+import org.apache.camel.http.base.HttpOperationFailedException;
 import org.apache.camel.model.rest.RestBindingMode;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -24,16 +27,52 @@ public class TransactionRoute extends RouteBuilder {
     @Override
     public void configure() throws Exception {
 
-        // 1. Onservabilidad, manejo de Excepciones
+        // 0. Configurar Dead Letter Channel global
+        errorHandler(deadLetterChannel("log:deadLetter")
+                .maximumRedeliveries(3)
+                .redeliveryDelay(1000)
+                .retryAttemptedLogLevel(LoggingLevel.WARN));
+
+        // 1. onException específicos
+        onException(ValidationException.class)
+                .handled(true)
+                .log(LoggingLevel.WARN, "Payload inválido: ${exception.message}")
+                .setHeader(Exchange.HTTP_RESPONSE_CODE, constant(400))
+                .setBody(simple("{\"error\":\"Formato inválido\"}"));
+
+        onException(HttpOperationFailedException.class)
+                .handled(true)
+                .log(LoggingLevel.ERROR, "Llamada HTTP fallida: código ${exception.statusCode}")
+                .setHeader(Exchange.HTTP_RESPONSE_CODE, constant(502))
+                .setBody(simple("{\"error\":\"Servicio externo no disponible\"}"));
+
+//        onException(MongoException.class)
+//                .handled(true)
+//                .log(LoggingLevel.ERROR, "Error MongoDB: ${exception.message}")
+//                .setHeader(Exchange.HTTP_RESPONSE_CODE, constant(500))
+//                .setBody(simple("{\"error\":\"Problema de base de datos\"}"));
+
+        // OnException genérico
         onException(Exception.class)
                 .handled(true)
-                .log("Error: ${exception.message}")
+                .log("Error inesperado: ${exception.message}")
                 // Usamos la cabecera estándar para el código HTTP
                 .setHeader(Exchange.HTTP_RESPONSE_CODE, constant(500))
-                .setBody()
-                .simple("{\"error\":\"${exception.message}\"}");
+                .setBody(simple("{\"error\":\"${exception.message}\"}"));
 
-        // 2. Configuración REST
+        // 2. Ruta periódica de heartbeat y health-check
+        from("timer://orchestratorHeartBeat?fixedRate=true&period=60000")
+                .routeId("heartbeatRoute")
+                .log("🔔 Heartbeat fired at ${header.firedTime}")
+                .to("direct:healthCheck");
+
+        from("direct:healthCheck")
+                .routeId("healthCheckRoute")
+                .to("http://localhost:8080/actuator/health")
+                .log("Health status: ${body}");
+
+
+        // 3. Configuración REST
         restConfiguration()
                 .component("servlet")
                 .contextPath("/api")
@@ -41,7 +80,7 @@ public class TransactionRoute extends RouteBuilder {
                 // JSON con sangría para facilitar lectura durante desarrollo
                 .dataFormatProperty("prettyPrint", "false");
 
-        // 3. Endpoint de Prueba (/test/a)
+        // 4. Endpoint de Prueba (/test/a)
         rest("/test")
                 .get("/a")
                 .type(TransactionRequest.class)
@@ -51,7 +90,7 @@ public class TransactionRoute extends RouteBuilder {
                 // Ping a servicio externo para validación de configuración
                 .to("https://postman-echo.com/get?bridgeEndpoint=true&id=123");
 
-        // 4. Endpoint Principal (/transactions)
+        // 5. Endpoint Principal (/transactions)
         rest("/transactions")
                 .post()
                 .type(TransactionRequest.class)
@@ -60,10 +99,10 @@ public class TransactionRoute extends RouteBuilder {
         from("direct:processTransaction")
                 .routeId("transactionRoute")
 
-                // 4.1 Logging de la solicitud
+                // 5.1 Logging de la solicitud
                 .log("Solicitud recibida: ${body}")
 
-                // 4.2 Seguridad (Validación JWT simulada)
+                // 5.2 Seguridad (Validación JWT simulada)
                 .process(exchange -> {
                     String authHeader = exchange.getIn().getHeader("Authorization", String.class);
                     if (authHeader == null || !authHeader.startsWith("Bearer ")) {
@@ -75,7 +114,7 @@ public class TransactionRoute extends RouteBuilder {
                     }
                 })
 
-                // 4.3 Lógica de negocio: cargo / abono
+                // 5.3 Lógica de negocio: cargo / abono
                 .choice()
                 .when(simple("${body.tipo} == 'cargo'"))
                 .log("Realizando cargo de ${body.monto} a la cuenta ${body.cuenta}")
@@ -85,13 +124,13 @@ public class TransactionRoute extends RouteBuilder {
                 .throwException(new IllegalArgumentException("Tipo de transacción desconocido"))
                 .end()
 
-                // 4.4 Publicación de evento (simulación de guardar en MongoDB y publicar evento Kafka)
+                // 5.4 Publicación de evento (simulación de guardar en MongoDB y publicar evento Kafka)
                 .process(exchange -> {
                     TransactionRequest request = exchange.getIn().getBody(TransactionRequest.class);
                     eventPublisher.publish(request);
                 })
 
-                // 4.5 Construcción de la respuesta
+                // 6.5 Construcción de la respuesta
                 .setBody(constant(Collections.singletonMap("status", "OK")))
                 .setHeader(Exchange.CONTENT_TYPE, constant("application/json"))
                 .setHeader(Exchange.HTTP_RESPONSE_CODE, constant(200));

@@ -12,7 +12,7 @@ public class EventPublisher {
     public void publish(TransactionRequest req) {
         // Simulación de publicación a Kafka y almacenamiento en MongoDB
         LOG.info("[EVENT] Publicando transacción: tipo={}, cuenta={}, monto={}",
-                req.getTipo(), req.getCuenta(), req.getMonto());
+                new Object[]{req.getTipo(), req.getCuenta(), req.getMonto()});
         // Aquí iría la integración real a MongoDB y Kafka
     }
 }

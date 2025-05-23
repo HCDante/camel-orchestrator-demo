@@ -1,11 +1,22 @@
 package com.demo.orchestrator.model;
 
+/**
+ * DTO para representar la petición de una transacción.
+ * Incluye el tipo de operación (cargo/abono), la cuenta afectada y el monto a procesar.
+ */
+
 public class TransactionRequest {
-    private String tipo; // "cargo" o "abono"
+    // Tipo: "cargo" o "abono"
+    private String tipo;
+    // Cuenta afectada
     private String cuenta;
+    // Monto a procesar
     private double monto;
 
-    // Getters y Setters
+    // Constructor vacío para JSON
+    public TransactionRequest() {}
+
+    // Getters y setters
     public String getTipo() { return tipo; }
     public void setTipo(String tipo) { this.tipo = tipo; }
 
